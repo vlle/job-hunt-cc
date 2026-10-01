@@ -16,6 +16,8 @@ import {
   variantsOf,
   visibleLeadsOf,
   type Application,
+  type Config,
+  type Layout,
   type Lead,
   type Tracker,
 } from '../hooks/hunt'
@@ -158,10 +160,10 @@ describe('hunt', () => {
     }
     const tracker: Tracker = { v: 1, applications: [app()], hidden: ['c'] }
 
-    expect(visibleLeadsOf(leads, tracker).map(item => item.id)).toEqual(['b', 'a'])
+    expect(visibleLeadsOf(leads, tracker, 'one list').map(item => item.id)).toEqual(['b', 'a'])
   })
 
-  test('relocation jobs go first and remote jobs after them, each group by fit', () => {
+  test('one list ranks by fit alone, a grouped layout puts its group on top and ranks each by fit', () => {
     const leads = {
       ...EMPTY_LEADS,
       leads: [
@@ -172,7 +174,11 @@ describe('hunt', () => {
       ],
     }
 
-    expect(visibleLeadsOf(leads, EMPTY_TRACKER).map(item => item.id)).toEqual(['m2', 'm1', 'r2', 'r1'])
+    const idsOf = (layout: Layout) => visibleLeadsOf(leads, EMPTY_TRACKER, layout).map(item => item.id)
+
+    expect(idsOf('one list')).toEqual(['r2', 'm2', 'r1', 'm1'])
+    expect(idsOf('relocate first')).toEqual(['m2', 'm1', 'r2', 'r1'])
+    expect(idsOf('remote first')).toEqual(['r2', 'r1', 'm2', 'm1'])
   })
 
   test('merging a scan keeps the found date, jobs older than 30 days drop out', () => {
@@ -233,7 +239,7 @@ describe('hunt', () => {
   })
 
   test('the search prompt carries the target, exclusions, facts file, past applications and the save tool', () => {
-    const config = { target: 'Go, UK', exclude: 'frontend and internships', facts: 'facts.md' }
+    const config: Config = { target: 'Go, UK', exclude: 'frontend and internships', facts: 'facts.md', layout: 'one list' }
     const prompt = scanPromptOf(config, { v: 1, applications: [app()], hidden: [] })
 
     expect(prompt).toContain('Go, UK')
@@ -241,14 +247,15 @@ describe('hunt', () => {
     expect(prompt).toContain('Skip frontend and internships.')
     expect(prompt).toContain('Already applied to: Nakatomi')
     expect(prompt).toContain('mcp__job-hunt__save_leads')
-    expect(prompt).toContain('up to 10 of each')
+    expect(prompt).toContain('up to 20 jobs that match the target')
+    expect(prompt).toContain('do not split the list evenly')
     expect(prompt).toContain('remote=true only when')
     expect(prompt).toContain('any contract form counts')
     expect(prompt).toContain('at most 20 jobs')
   })
 
   test('without exclusions and a facts file the search prompt names neither', () => {
-    const prompt = scanPromptOf({ target: 'Go', exclude: '', facts: '' }, EMPTY_TRACKER)
+    const prompt = scanPromptOf({ target: 'Go', exclude: '', facts: '', layout: 'one list' }, EMPTY_TRACKER)
 
     expect(prompt).toContain('The resume is resume.txt. Search the web')
     expect(prompt).not.toContain('Skip')

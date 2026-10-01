@@ -8,7 +8,7 @@ The panel keeps the whole search in one place:
 
 - **RESUME**: your resume variants (the base one and a folder per tailored copy), their formats, when each was last edited and how many applications used it.
 - **APPLIED**: the funnel `sent › screen › interview › offer`, one row per active application with its stage and age, and a `⚑` flag on anything silent for 21 days.
-- **JOBS**: openings Claude found for you, ranked by how well they fit the resume, in two groups: **RELOCATE** (visa sponsorship or relocation) and **REMOTE** (fully remote and workable from your country, whatever the contract form: employee, contractor, B2B or EOR).
+- **JOBS**: openings Claude found for you in one list ranked by how well they fit the resume. `⌂` marks a fully remote job you can do from your country, whatever the contract form (employee, contractor, B2B or EOR); `✈` marks explicit visa sponsorship or relocation. The `layout` option splits the list into RELOCATE and REMOTE groups, either one on top.
 
 Searching and tailoring are Claude turns the panel queues for you, so they use the tools of your own session (web search, scrapers, MCP servers). The mod itself only reads and writes a few JSON files in your folder.
 
@@ -62,7 +62,7 @@ From `resume.txt` the panel takes the first three non-empty lines as name, title
 
 `/hunt` opens the panel. The same actions work by row number: `/hunt scan`, `/hunt anon`, `/hunt apply 3`, `/hunt tailor 3`, `/hunt hide 3`, `/hunt open 3`, `/hunt next 1`, `/hunt reject 1`, `/hunt close 1`.
 
-**Search** (`s`) queues a turn that asks Claude to find up to 10 jobs of each kind matching your target, open every posting to check that it still accepts applications, skip companies you already applied to and save the result with `save_leads`. Jobs found in the last three days get a `•`, a `✈` marks explicit sponsorship, and jobs older than 30 days drop out.
+**Search** (`s`) queues a turn that asks Claude to find up to 20 jobs matching your target, open every posting to check that it still accepts applications, skip companies you already applied to and save the result with `save_leads`. Jobs found in the last three days get a `•`, and jobs older than 30 days drop out.
 
 **Tailor** (`t`) queues a turn that creates `<company>/` modelled on your latest tailored folder, using only verified facts, and lists the requirements the resume does not cover. It does not log the application: press `a` when you have sent it.
 
@@ -80,9 +80,10 @@ Set these in `/config` (each is a row there) or under `pluginConfigs` in your se
 
 | Option | Default | Used for |
 | --- | --- | --- |
-| `target` | roles that match the resume: abroad with visa sponsorship or relocation, or fully remote from my country | what the search looks for, one line; say here if you need a particular contract form |
+| `target` | roles that match the resume: abroad with visa sponsorship or relocation, or fully remote from my country | what the search looks for, one line; it also sets the balance between remote and relocation (`fully remote; relocation only with sponsorship, as a fallback`) and any contract form you need |
 | `exclude` | empty | kinds of jobs the search skips, e.g. `staff/lead roles, frontend, internships` |
 | `facts` | `CLAUDE.local.md` | file in your folder with verified facts; search and tailoring may use only these and the resume |
+| `layout` | `one list` | how JOBS is shown: `one list` by fit, or `relocate first` / `remote first` for two groups; row numbers follow what you see |
 
 ## Data
 

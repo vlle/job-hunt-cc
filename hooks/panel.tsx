@@ -1,6 +1,7 @@
 import type { ClientElements, ClientModule, RenderElement } from 'claude-code'
 
 import {
+  DEFAULT_LAYOUT,
   FRESH_MS,
   STAGE_LABEL,
   daysSinceOf,
@@ -11,6 +12,7 @@ import {
   nextStageOf,
   shortDayOf,
   type Application,
+  type Layout,
   type Lead,
   type PanelProps,
   type Stage,
@@ -22,25 +24,29 @@ type Box = { tick: number; pickId: string | null; pickIndex: number; ids: string
 type State = { tick: number; box: Box }
 type Post = (act: string, id?: string) => void
 type Pick = (id: string, index: number) => void
-type LeadGroup = { label: string; note: string; isRemote: boolean }
+type LeadGroup = { label: string | null; note: string; isRemote: boolean | null }
 type ShownGroup = LeadGroup & { count: number; shown: Lead[] }
 
 const TICK_MS = 100
 const MIN_COLUMNS = 30
 const HOTKEYS = '123456789'
 const ANON_KEY = 'p'
-const INLINE_LEADS = 2
-const LEAD_GROUPS: readonly LeadGroup[] = [
-  { label: 'RELOCATE', note: 'visa or move', isRemote: false },
-  { label: 'REMOTE', note: 'from home', isRemote: true },
-]
+const INLINE_LEADS = 4
+const RELOCATE: LeadGroup = { label: 'RELOCATE', note: 'visa or move', isRemote: false }
+const REMOTE: LeadGroup = { label: 'REMOTE', note: 'from home', isRemote: true }
+const LEAD_GROUPS: Record<Layout, readonly LeadGroup[]> = {
+  'one list': [{ label: null, note: '', isRemote: null }],
+  'relocate first': [RELOCATE, REMOTE],
+  'remote first': [REMOTE, RELOCATE],
+}
 const CLOSE_COLUMNS = 2
 const FIT_COLUMNS = 5
 const COMPANY_COLUMNS = 10
 const INDENT = '    '
 const FUNNEL_LABEL: Partial<Record<Stage, string>> = { applied: 'sent', screen: 'screen', interview: 'interview', offer: 'offer' }
 
-const Panel: ClientModule<PanelProps, State> = (props, surface) => {
+const Panel: ClientModule<PanelProps, State> = (given, surface) => {
+  const props: PanelProps = { ...given, layout: given.layout ?? DEFAULT_LAYOUT }
   let box = surface.state?.box
   if (!box) {
     const created: Box = { tick: 0, pickId: null, pickIndex: 0, ids: [], isBusy: false }
@@ -81,11 +87,14 @@ const Panel: ClientModule<PanelProps, State> = (props, surface) => {
 
   const active = props.applications.filter(isActive)
   const closed = props.applications.filter(app => !isActive(app))
-  const groups: ShownGroup[] = LEAD_GROUPS.map(group => {
-    const all = props.leads.filter(lead => (lead.remote === true) === group.isRemote)
+  const layoutGroups = LEAD_GROUPS[props.layout] ?? LEAD_GROUPS[DEFAULT_LAYOUT]
+  const groups: ShownGroup[] = layoutGroups.map(group => {
+    const all = props.leads.filter(lead => group.isRemote === null || lead.remote === group.isRemote)
+    const inline = Math.floor(INLINE_LEADS / layoutGroups.length)
 
-    return { ...group, count: all.length, shown: props.isDocked ? all : all.slice(0, INLINE_LEADS) }
+    return { ...group, count: all.length, shown: props.isDocked ? all : all.slice(0, inline) }
   })
+  const isRemoteMarked = layoutGroups.length === 1
   const leads = groups.flatMap(group => group.shown)
   const items: Item[] = [
     ...active.map(application => ({ id: `app:${application.id}`, application })),
@@ -130,11 +139,14 @@ const Panel: ClientModule<PanelProps, State> = (props, surface) => {
   } else {
     let first = active.length
     for (const group of groups) {
-      rows.push(groupHeadOf(ui, group))
+      if (group.label !== null) {
+        rows.push(groupHeadOf(ui, group))
+      }
       group.shown.forEach((lead, offset) => {
         const index = active.length + leads.indexOf(lead)
         const isSelected = selected?.lead === lead
-        rows.push(leadRowOf(ui, lead, first + offset, isSelected, props.now, width, () => pick(`lead:${lead.id}`, index)))
+        const onPick = () => pick(`lead:${lead.id}`, index)
+        rows.push(leadRowOf(ui, lead, first + offset, isSelected, isRemoteMarked, props.now, width, onPick))
         if (isSelected) {
           rows.push(...leadDetailOf(ui, lead, width, props.busy !== null, post))
         }
@@ -376,11 +388,13 @@ function leadRowOf(
   lead: Lead,
   row: number,
   isSelected: boolean,
+  isRemoteMarked: boolean,
   now: number,
   width: number,
   onPick: () => void,
 ): RenderElement {
   const { Box, Text } = ui
+  const mark = lead.remote && isRemoteMarked ? '⌂' : lead.sponsor ? '✈' : ' '
   const labelWidth = Math.max(8, width - 1 - 3 - 1 - FIT_COLUMNS - 1 - 4)
   const label = fitOf(`${fitOf(lead.company, COMPANY_COLUMNS)} ${lead.title}`, labelWidth)
 
@@ -391,7 +405,7 @@ function leadRowOf(
       <Text> </Text>
       {cellsOf(ui, fitBarOf(lead.fit, FIT_COLUMNS))}
       <Text dimColor>{` ${fitOf(lead.country, 3)}`}</Text>
-      <Text color={ACCENT}>{lead.sponsor ? '✈' : ' '}</Text>
+      <Text color={ACCENT}>{mark}</Text>
     </Box>
   )
 }

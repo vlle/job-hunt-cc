@@ -41,7 +41,9 @@ export type Variant = { name: string; path: string; formats: string[]; updated_m
 
 export type Busy = { kind: 'scan' | 'tailor'; label: string; since_ms: number }
 
-export type Config = { target: string; exclude: string; facts: string }
+export type Layout = 'one list' | 'relocate first' | 'remote first'
+
+export type Config = { target: string; exclude: string; facts: string; layout: Layout }
 
 export type PanelProps = {
   now: number
@@ -51,6 +53,7 @@ export type PanelProps = {
   applications: Application[]
   leads: Lead[]
   scanned_ms: number | null
+  layout: Layout
   busy: Busy | null
   columns: number
   isDocked: boolean
@@ -82,10 +85,12 @@ export const STAGE_LABEL: Record<Stage, string> = {
 }
 export const EMPTY_TRACKER: Tracker = { v: 1, applications: [], hidden: [] }
 export const EMPTY_LEADS: Leads = { v: 1, scanned_ms: null, query: null, leads: [] }
-export const USAGE = 'usage: /hunt [scan | anon | apply|tailor|hide|open|next|reject|close <row>]'
+export const LAYOUTS: readonly Layout[] = ['one list', 'relocate first', 'remote first']
+export const DEFAULT_LAYOUT: Layout = 'one list'
+export const USAGE ='usage: /hunt [scan | anon | apply|tailor|hide|open|next|reject|close <row>]'
 
 const LEAD_TTL_MS = 30 * DAY_MS
-const SCAN_PER_KIND = 10
+const SCAN_LIMIT = 20
 const REMOTE_REGIONS = new Set(['EU', 'WW'])
 const REMOTE_PLACE = /remote|home[\s-]?based/i
 const ROW_KINDS: Record<string, readonly string[]> = {
@@ -113,6 +118,10 @@ const SHORT_SKILL: Record<string, string> = {
 
 export function isStage(value: unknown): value is Stage {
   return typeof value === 'string' && (STAGES as readonly string[]).includes(value)
+}
+
+export function isLayout(value: unknown): value is Layout {
+  return typeof value === 'string' && (LAYOUTS as readonly string[]).includes(value)
 }
 
 export function isDay(value: unknown): value is string {
@@ -337,13 +346,15 @@ export function hideLead(tracker: Tracker, id: string): Tracker {
   return tracker.hidden.includes(id) ? tracker : { ...tracker, hidden: [...tracker.hidden, id] }
 }
 
-export function visibleLeadsOf(leads: Leads, tracker: Tracker): Lead[] {
+export function visibleLeadsOf(leads: Leads, tracker: Tracker, layout: Layout): Lead[] {
   const hidden = new Set(tracker.hidden)
   const applied = new Set(tracker.applications.flatMap(app => (app.url ? [app.id, urlKeyOf(app.url)] : [app.id])))
+  const groupOf = (lead: Lead) =>
+    layout === 'relocate first' ? Number(lead.remote) : layout === 'remote first' ? Number(!lead.remote) : 0
 
   return leads.leads
     .filter(lead => !hidden.has(lead.id) && !applied.has(lead.id) && !applied.has(idOf(`${lead.company} ${lead.title}`)))
-    .sort((a, b) => Number(a.remote) - Number(b.remote) || b.fit - a.fit || (b.posted ?? '').localeCompare(a.posted ?? ''))
+    .sort((a, b) => groupOf(a) - groupOf(b) || b.fit - a.fit || (b.posted ?? '').localeCompare(a.posted ?? ''))
 }
 
 export function mergeLeads(
@@ -464,13 +475,14 @@ export function scanPromptOf(config: Config, tracker: Tracker): string {
   return [
     `Find jobs I should apply to: ${config.target}.`,
     `The resume is resume.txt${facts}. Search the web with the tools you have and the public ATS APIs (Greenhouse, Lever, Ashby); open every posting and make sure it still accepts applications.`,
-    `Look for two kinds of jobs, up to ${SCAN_PER_KIND} of each: jobs with a visa, sponsorship or relocation, and fully remote jobs I can do from my country of residence (the resume location) — worldwide, a region that includes my country, or as a contractor or B2B. The employer does not need an entity or payroll in my country: any contract form counts.`,
+    `Find up to ${SCAN_LIMIT} jobs that match the target, best matches first. Follow the target on how much remote work and relocation it wants; do not split the list evenly between them.`,
     ...(config.exclude ? [`Skip ${config.exclude}.`] : []),
     'sponsor=true only when the posting explicitly mentions a visa, sponsorship or relocation.',
-    'remote=true only when the posting lets me work from my country without moving; remote limited to a country or region I do not live in, or to holders of a work permit I do not have (such as remote EU or remote UK), is remote=false.',
+    'remote=true only when the posting lets me work from my country of residence (the resume location) without moving — worldwide, a region that includes my country, or as a contractor or B2B. The employer does not need an entity or payroll in my country: any contract form counts.',
+    'Remote limited to a country or region I do not live in, or to holders of a work permit I do not have (such as remote EU or remote UK), is remote=false.',
     `Already applied to: ${applied.length > 0 ? applied.join(', ') : 'nowhere yet'} — do not suggest these companies.`,
     'fit 0–100 is how well the job matches the resume (stack, level, domain); why says briefly why and what is missing, in English.',
-    `Save the result with a single mcp__job-hunt__save_leads call, at most ${2 * SCAN_PER_KIND} jobs; reply in chat with a short summary.`,
+    `Save the result with a single mcp__job-hunt__save_leads call, at most ${SCAN_LIMIT} jobs; reply in chat with a short summary.`,
   ].join('\n')
 }
 

@@ -1,12 +1,14 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
+  DEFAULT_LAYOUT,
   EMPTY_LEADS,
   EMPTY_TRACKER,
   STAGES,
   STAGE_LABEL,
   hideLead,
   isDay,
+  isLayout,
   isStage,
   jsonTextOf,
   leadsOf,
@@ -149,6 +151,7 @@ export const register: Register = (on, options) => {
       target: optionOf(options.target, DEFAULT_TARGET),
       exclude: optionOf(options.exclude, ''),
       facts: optionOf(options.facts, DEFAULT_FACTS),
+      layout: isLayout(options.layout) ? options.layout : DEFAULT_LAYOUT,
     },
     root: '',
     now: 0,
@@ -219,7 +222,8 @@ export const register: Register = (on, options) => {
     if (world.isDemo) {
       return { text: `job-hunt: ${DEMO_REFUSAL}` }
     }
-    const refs = rowRefsOf(sortedApplicationsOf(world.tracker.applications), visibleLeadsOf(world.leads, world.tracker))
+    const visible = visibleLeadsOf(world.leads, world.tracker, world.config.layout)
+    const refs = rowRefsOf(sortedApplicationsOf(world.tracker.applications), visible)
     const command = rowCommandOf(args, refs)
     if ('error' in command) {
       return { text: `job-hunt: ${command.error}` }
@@ -276,7 +280,7 @@ export const register: Register = (on, options) => {
     const merged = mergeLeads(current, incoming, query, await $.clock.now())
     await $.fs.write(`${world.root}/${LEADS_PATH}`, jsonTextOf(merged.leads))
     await refresh($, world)
-    const shown = visibleLeadsOf(world.leads, world.tracker).length
+    const shown = visibleLeadsOf(world.leads, world.tracker, world.config.layout).length
 
     return {
       result: `saved to ${LEADS_PATH}: +${merged.added} new, ${merged.updated} updated, ${merged.skipped} skipped without company/title/url; ${shown} in the panel`,
@@ -335,8 +339,12 @@ export const register: Register = (on, options) => {
 }
 
 function panelPropsOf(world: World, columns: number, isDocked: boolean): PanelProps {
+  const layout = world.config.layout
   if (world.isDemo) {
-    return { now: world.now, hasRoot: true, busy: null, columns, isDocked, ...demoOf(world.now) }
+    const demo = demoOf(world.now)
+    const leads = visibleLeadsOf({ ...EMPTY_LEADS, leads: demo.leads }, EMPTY_TRACKER, layout)
+
+    return { now: world.now, hasRoot: true, busy: null, columns, isDocked, layout, ...demo, leads }
   }
 
   return {
@@ -345,8 +353,9 @@ function panelPropsOf(world: World, columns: number, isDocked: boolean): PanelPr
     profile: world.profile,
     variants: variantsOf(world.files, world.tracker.applications),
     applications: sortedApplicationsOf(world.tracker.applications),
-    leads: visibleLeadsOf(world.leads, world.tracker),
+    leads: visibleLeadsOf(world.leads, world.tracker, layout),
     scanned_ms: world.leads.scanned_ms,
+    layout,
     busy: world.pending?.busy ?? null,
     columns,
     isDocked,

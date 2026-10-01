@@ -98,6 +98,15 @@ const leadsText = () =>
     ],
   })
 
+const REKALL = 'https://jobs.example.com/rekall/jobs/5146709'
+
+const leadsWithRemote = () => {
+  const leads = JSON.parse(leadsText())
+  leads.leads.push({ company: 'Rekall', title: 'Golang Engineer', url: REKALL, location: 'Home based - Worldwide', country: 'WW', fit: 90, found_ms: NOW - DAY })
+
+  return JSON.stringify(leads)
+}
+
 type Files = Record<string, string>
 
 function world(on: On, files: Files) {
@@ -272,20 +281,40 @@ describe('register', () => {
     expect(drawn).toContain('search')
   })
 
-  test('jobs split into RELOCATE and REMOTE, row numbers follow the groups', async ($, on) => {
-    const rekall = 'https://jobs.example.com/rekall/jobs/5146709'
-    const leads = JSON.parse(leadsText())
-    leads.leads.push({ company: 'Rekall', title: 'Golang Engineer', url: rekall, location: 'Home based - Worldwide', country: 'WW', fit: 90, found_ms: NOW - DAY })
-    const { processes, clock } = await started($, on, filesOf({ [LEADS]: JSON.stringify(leads) }))
+  test('jobs are one list by fit with remote ones marked, row numbers follow it', async ($, on) => {
+    const { processes, clock } = await started($, on, filesOf({ [LEADS]: leadsWithRemote() }))
+    const drawn = await textOf(await mountPanel($))
+
+    expect(drawn).not.toContain('RELOCATE')
+    expect(drawn).not.toContain('REMOTE')
+    expect(drawn).toContain('⌂')
+    expect(drawn.indexOf('Rekall')).toBeLessThan(drawn.indexOf('Gekko'))
+
+    await $.command.run(command('open 2'))
+    await clock.settle()
+    expect(processes).toEqual([['xdg-open', REKALL], ['open', REKALL]])
+  })
+
+  test('relocate first splits jobs into RELOCATE and REMOTE, row numbers follow the groups', { options: { layout: 'relocate first' } }, async ($, on) => {
+    const { processes, clock } = await started($, on, filesOf({ [LEADS]: leadsWithRemote() }))
     const drawn = await textOf(await mountPanel($))
 
     expect(drawn).toContain('RELOCATE|  1 · visa or move')
     expect(drawn).toContain('REMOTE|  1 · from home')
+    expect(drawn).not.toContain('⌂')
     expect(drawn.indexOf('Gekko')).toBeLessThan(drawn.indexOf('Rekall'))
 
     await $.command.run(command('open 3'))
     await clock.settle()
-    expect(processes).toEqual([['xdg-open', rekall], ['open', rekall]])
+    expect(processes).toEqual([['xdg-open', REKALL], ['open', REKALL]])
+  })
+
+  test('remote first puts the REMOTE group on top', { options: { layout: 'remote first' } }, async ($, on) => {
+    await started($, on, filesOf({ [LEADS]: leadsWithRemote() }))
+    const drawn = await textOf(await mountPanel($))
+
+    expect(drawn.indexOf('REMOTE')).toBeLessThan(drawn.indexOf('RELOCATE'))
+    expect(drawn.indexOf('Rekall')).toBeLessThan(drawn.indexOf('Gekko'))
   })
 
   test('above the prompt (inline) the resume is not drawn', async ($, on) => {
