@@ -1,0 +1,6 @@
+{
+  "description": "Polls the folder with resume.txt (resume variants, hunt/applications.json, hunt/leads.json), right-side dock panel, /hunt, tools save_leads / log_application / set_stage",
+  "modules": [
+    "./register.tsx"
+  ]
+}

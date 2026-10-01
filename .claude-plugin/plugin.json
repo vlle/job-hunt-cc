@@ -1,0 +1,33 @@
+{
+  "name": "job-hunt",
+  "version": "0.5.0",
+  "description": "Right-side dock panel for a job search folder (one with resume.txt): resume variants, application funnel with a silence flag, jobs ranked by resume fit in two groups (relocate and remote); the applied, tailor and search buttons queue a Claude turn; /hunt opens it by hand; p or /hunt anon swaps in demo data for screenshots.",
+  "author": {
+    "name": "vlle",
+    "url": "https://github.com/vlle"
+  },
+  "homepage": "https://github.com/vlle/job-hunt-cc",
+  "repository": "https://github.com/vlle/job-hunt-cc",
+  "license": "MIT",
+  "keywords": ["job-search", "resume", "panel", "mod"],
+  "userConfig": {
+    "target": {
+      "type": "string",
+      "title": "Which jobs to look for",
+      "description": "search target for s: search and /hunt scan, one line",
+      "default": "roles that match the resume: abroad with visa sponsorship or relocation, or fully remote from my country"
+    },
+    "exclude": {
+      "type": "string",
+      "title": "Which jobs to skip",
+      "description": "kinds of jobs the search leaves out, one line, e.g. staff/lead roles, frontend, internships",
+      "default": ""
+    },
+    "facts": {
+      "type": "string",
+      "title": "Verified facts file",
+      "description": "file in the resume folder with facts about you beyond the resume; search and tailoring use only these facts",
+      "default": "CLAUDE.local.md"
+    }
+  }
+}
