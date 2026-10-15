@@ -1,0 +1,14 @@
+{
+  "name": "job-hunt-cc",
+  "description": "job-hunt, a job search panel mod for Claude Code",
+  "owner": {
+    "name": "vlle"
+  },
+  "plugins": [
+    {
+      "name": "job-hunt",
+      "source": "./",
+      "description": "Job search panel for Claude Code: application funnel, jobs ranked by fit with your resume, tailored resumes."
+    }
+  ]
+}
