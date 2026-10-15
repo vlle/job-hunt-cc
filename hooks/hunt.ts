@@ -1,45 +1,8 @@
-export type Stage = 'applied' | 'screen' | 'interview' | 'offer' | 'rejected' | 'closed'
+import type { Application, Busy, FileEntry, Folder, Lead, Leads, Profile, Stage, Tracker } from '../types'
 
-export type Step = { stage: Stage; on: string }
-
-export type Application = {
-  id: string
-  company: string
-  role: string
-  url: string | null
-  resume: string | null
-  stage: Stage
-  history: Step[]
-  note: string | null
-}
-
-export type Tracker = { v: 1; applications: Application[]; hidden: string[] }
-
-export type Lead = {
-  id: string
-  company: string
-  title: string
-  url: string
-  location: string
-  country: string
-  sponsor: boolean
-  remote: boolean
-  salary: string | null
-  posted: string | null
-  fit: number
-  why: string | null
-  found_ms: number
-}
-
-export type Leads = { v: 1; scanned_ms: number | null; query: string | null; leads: Lead[] }
-
-export type Profile = { name: string; title: string; place: string | null; skills: string[]; english: string | null }
-
-export type FileEntry = { dir: string; name: string; mtime_ms: number }
+export type { Application, Busy, FileEntry, Folder, Lead, Leads, Pending, Profile, Stage, Step, Tracker } from '../types'
 
 export type Variant = { name: string; path: string; formats: string[]; updated_ms: number; sent: number }
-
-export type Busy = { kind: 'scan' | 'tailor'; label: string; since_ms: number }
 
 export type Layout = 'one list' | 'relocate first' | 'remote first'
 
@@ -85,9 +48,10 @@ export const STAGE_LABEL: Record<Stage, string> = {
 }
 export const EMPTY_TRACKER: Tracker = { v: 1, applications: [], hidden: [] }
 export const EMPTY_LEADS: Leads = { v: 1, scanned_ms: null, query: null, leads: [] }
+export const EMPTY_FOLDER: Folder = { root: '', profile: null, files: [], tracker: EMPTY_TRACKER, leads: EMPTY_LEADS }
 export const LAYOUTS: readonly Layout[] = ['one list', 'relocate first', 'remote first']
 export const DEFAULT_LAYOUT: Layout = 'one list'
-export const USAGE ='usage: /hunt [scan | anon | apply|tailor|hide|open|next|reject|close <row>]'
+export const USAGE = 'usage: /hunt [init | demo | scan | apply|tailor|hide|open|next|reject|close <row>]'
 
 const LEAD_TTL_MS = 30 * DAY_MS
 const SCAN_LIMIT = 20
@@ -497,6 +461,17 @@ export function tailorPromptOf(lead: Lead, pattern: string | null, facts: string
       : `Read the whole posting and create the folder ${folder}: resume.html, resume.txt and a PDF of exactly one A4 page.`,
     `Only verified facts from ${source}: mirror the wording of the posting where it is true, never add experience that does not exist.`,
     'At the end, list the requirements of the posting that the resume does not cover. Do not log the application — the panel button does that.',
+  ].join('\n')
+}
+
+export function initPromptOf(folder: string): string {
+  return [
+    `Set up this folder for the job-hunt panel: ${folder}`,
+    'Find my resume here: a PDF, DOCX, Markdown, HTML or text file, or a LinkedIn profile export. If there is none, ask me to paste my resume or give a path to it, and wait for my answer.',
+    'Write it to resume.txt as plain text: my name on the first line, my job title on the second, contacts on the third separated by " · " with my city first, then sections under UPPERCASE headings, one of them SKILLS with rows like "Languages: Go, SQL".',
+    'Use only facts from the source, never add anything. Do not touch the original file.',
+    'Then ask me in one line which jobs I am looking for (role, location or remote, visa needs) and tell me I can save it as the job-hunt "target" option in /config.',
+    'Finish by telling me to press s in the job-hunt panel to search for jobs.',
   ].join('\n')
 }
 

@@ -109,9 +109,11 @@ const leadsWithRemote = () => {
 
 type Files = Record<string, string>
 
-function world(on: On, files: Files) {
+function world(on: On, files: Files, isWriteFailing: boolean) {
   const opened: { id: string; isFocused: boolean }[] = []
   const tools: string[] = []
+  const deferrals: (boolean | undefined)[] = []
+  const notified: string[] = []
   const submitted: string[] = []
   const processes: string[][] = []
   const writes: string[] = []
@@ -123,6 +125,7 @@ function world(on: On, files: Files) {
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('tool.register', ($, e) => {
     tools.push(e.name)
+    deferrals.push(e.isDeferred)
 
     return { value: { tool: `mcp__job-hunt__${e.name}` } }
   })
@@ -131,11 +134,17 @@ function world(on: On, files: Files) {
 
     return { value: { isPlaced: true as const } }
   })
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('ui.toast', ($, e) => {
     toasts.push(e.text)
 
     return { value: undefined }
+  })
+  on('ui.notify', ($, e) => {
+    notified.push(e.text)
+
+    return { value: { isSent: true as const, channel: 'terminal_bell' as const } }
   })
   on('prompt.submit', ($, e) => {
     submitted.push(e.text)
@@ -160,6 +169,9 @@ function world(on: On, files: Files) {
     return { value: text }
   })
   on('fs.write', ($, e) => {
+    if (isWriteFailing) {
+      return { deny: `EACCES: permission denied, open '${e.path}'` }
+    }
     files[e.path] = e.text
     writes.push(e.path)
 
@@ -187,7 +199,7 @@ function world(on: On, files: Files) {
     return { value: [...names].map(([name, kind]) => ({ name, kind, size: 1, isLink: false, mtimeMs: 0 })) }
   })
 
-  return { clock, opened, tools, submitted, processes, writes, toasts }
+  return { clock, opened, tools, deferrals, notified, submitted, processes, writes, toasts }
 }
 
 function filesOf(over: Files = {}): Files {
@@ -203,8 +215,8 @@ function filesOf(over: Files = {}): Files {
   }
 }
 
-async function started($: Engine, on: On, files: Files = filesOf()) {
-  const setup = world(on, files)
+async function started($: Engine, on: On, files: Files = filesOf(), isWriteFailing = false) {
+  const setup = world(on, files, isWriteFailing)
   await $.session.start(SESSION)
   await setup.clock.settle()
 
@@ -233,19 +245,51 @@ async function textOf(ui: Pick<Mounted, 'findAll'>): Promise<string> {
 }
 
 describe('register', () => {
-  test('a session in job-search opens the panel and registers the tools', async ($, on) => {
-    const { opened, tools } = await started($, on)
+  test('a session in job-search opens the panel and lists the tools up front, not behind tool search', async ($, on) => {
+    const { opened, tools, deferrals } = await started($, on)
 
     expect(opened).toEqual([{ id: 'job-hunt', isFocused: false }])
     expect(tools).toEqual(['save_leads', 'log_application', 'set_stage'])
+    expect(deferrals).toEqual([false, false, false])
   })
 
-  test('without resume.txt there are no tools, the panel stays closed and says what it waits for', async ($, on) => {
+  test('without resume.txt there are no tools, and the panel offers to set the folder up or show the demo', async ($, on) => {
     const { tools, opened } = await started($, on, {})
+    const drawn = await textOf(await mountPanel($))
 
     expect(tools).toEqual([])
     expect(opened).toEqual([])
-    expect(await textOf(await mountPanel($))).toContain('resume.txt not found')
+    expect(drawn).toContain('No resume.txt in this folder yet.')
+    expect(drawn).toContain('set up this folder')
+    expect(drawn).toContain('try the demo')
+  })
+
+  test('/hunt init queues a set-up turn, and the panel switches to the folder once resume.txt appears', async ($, on) => {
+    const { tools, submitted, opened, clock, files } = await started($, on, {})
+    const ui = await mountPanel($)
+
+    await $.command.run(command('init'))
+    await clock.settle()
+    expect(opened.at(-1)).toEqual({ id: 'job-hunt', isFocused: true })
+    expect(submitted).toHaveLength(1)
+    expect(submitted[0]).toContain(`Set up this folder for the job-hunt panel: ${ROOT}`)
+    expect(await textOf(ui)).toContain('Claude is setting up this folder')
+
+    Object.assign(files, filesOf())
+    await clock.advance(3000)
+    expect(tools).toEqual(['save_leads', 'log_application', 'set_stage'])
+    expect(await textOf(ui)).toContain('RESUME')
+  })
+
+  test('the demo works in a folder without a resume and writes nothing', async ($, on) => {
+    const { writes } = await started($, on, {})
+    const ui = await mountPanel($)
+    await ui.press({ key: 'hunt:demo' })
+    const drawn = await textOf(ui)
+
+    expect(drawn).toContain('Hooli')
+    expect(drawn).not.toContain('No resume.txt')
+    expect(writes).toEqual([])
   })
 
   test(
@@ -387,6 +431,20 @@ describe('register', () => {
     expect(await textOf(ui)).toContain('Claude is tailoring the resume for Gekko')
   })
 
+  test('a tailor turn ends the spinner and notifies, though the engine wraps the plugin prompt', async ($, on) => {
+    const { submitted, notified } = await started($, on)
+    const ui = await mountPanel($)
+    await ui.press({ key: `hunt:lead:${GEKKO_ID}` })
+    await ui.press({ key: 'hunt:tailor' })
+    const wrapped = `The job-hunt plugin sent a message:\n${submitted[0] ?? ''}\nAddress the message above.`
+
+    await $.turn.start({ text: wrapped, turnId: 'turn-1' })
+    await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+
+    expect(await textOf(ui)).not.toContain('Claude is tailoring')
+    expect(notified).toEqual(['the resume for Gekko is tailored'])
+  })
+
   test('s queues one search until the first one finishes', async ($, on) => {
     const { submitted } = await started($, on)
     const ui = await mountPanel($)
@@ -410,8 +468,8 @@ describe('register', () => {
     expect(opened.at(-1)).toEqual({ id: 'job-hunt', isFocused: true })
   })
 
-  test('save_leads merges the scan into leads.json and stops the search spinner', async ($, on) => {
-    const { files, clock } = await started($, on)
+  test('save_leads merges the scan into leads.json, stops the search spinner and notifies', async ($, on) => {
+    const { files, clock, notified } = await started($, on)
     const ui = await mountPanel($)
     await ui.press({ key: 'hunt:scan' })
     await clock.advance(60_000)
@@ -430,6 +488,7 @@ describe('register', () => {
     const drawn = await textOf(ui)
     expect(drawn).toContain('Spacely')
     expect(drawn).not.toContain('Claude is searching for jobs')
+    expect(notified).toEqual(['search finished, new jobs are in the panel'])
   })
 
   test('log_application and set_stage move an application through the funnel', async ($, on) => {
@@ -454,6 +513,15 @@ describe('register', () => {
     expect(files[TRACKER]).toBe('{oops')
   })
 
+  test('a tool whose write fails answers the model with the reason', async ($, on) => {
+    await started($, on, filesOf(), true)
+    const result = await $.tool.call({ tool: 'mcp__job-hunt__log_application', company: 'Bluth', role: 'Backend' })
+    const deny = 'deny' in result ? String(result.deny) : ''
+
+    expect(deny).toContain('job-hunt: log_application failed')
+    expect(deny).toContain('EACCES')
+  })
+
   test('n moves the selected application to the next stage', async ($, on) => {
     const { files } = await started($, on)
     const ui = await mountPanel($)
@@ -473,11 +541,11 @@ describe('register', () => {
     expect(processes).toEqual([['xdg-open', GEKKO], ['open', GEKKO]])
   })
 
-  test('/hunt anon swaps real data for demo data and back', async ($, on) => {
+  test('/hunt demo swaps real data for demo data, /hunt anon swaps it back', async ($, on) => {
     const { opened, toasts, clock } = await started($, on)
     const ui = await mountPanel($)
 
-    await $.command.run(command('anon'))
+    await $.command.run(command('demo'))
     await clock.settle()
     const demo = await textOf(ui)
     for (const real of ['Nakatomi', 'Oscorp', 'Gekko', 'nakatomi-core']) {

@@ -1,7 +1,7 @@
 {
   "name": "job-hunt",
-  "version": "0.6.0",
-  "description": "Right-side dock panel for a job search folder (one with resume.txt): resume variants, application funnel with a silence flag, jobs ranked by resume fit in one list or grouped by relocation and remote; the applied, tailor and search buttons queue a Claude turn; /hunt opens it by hand; p or /hunt anon swaps in demo data for screenshots.",
+  "version": "0.7.0",
+  "description": "Your job search in a panel next to Claude Code: an application funnel that flags silent companies, jobs Claude finds and ranks by fit with your resume, and a resume tailored per company. Plain JSON in your folder, nothing leaves it.",
   "author": {
     "name": "vlle",
     "url": "https://github.com/vlle"
@@ -9,7 +9,8 @@
   "homepage": "https://github.com/vlle/job-hunt-cc",
   "repository": "https://github.com/vlle/job-hunt-cc",
   "license": "MIT",
-  "keywords": ["job-search", "resume", "panel", "mod"],
+  "keywords": ["job-search", "jobs", "career", "resume", "application-tracker", "panel", "mod"],
+  "types": "./types/index.d.ts",
   "userConfig": {
     "target": {
       "type": "string",

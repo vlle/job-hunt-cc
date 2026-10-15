@@ -112,7 +112,7 @@ const Panel: ClientModule<PanelProps, State> = (given, surface) => {
   }
 
   if (!props.hasRoot) {
-    rows.push(<Text dimColor wrap="wrap">resume.txt not found: start the session inside the resume folder</Text>)
+    rows.push(<Text> </Text>, ...welcomeOf(ui, width, props.busy !== null, post))
 
     return <Column flexDirection="column" width={width}>{rows}</Column>
   }
@@ -190,6 +190,21 @@ function headOf(ui: ClientElements, props: PanelProps, tick: number, isBusy: boo
     [<Text color={ACCENT}>{glyph}</Text>, <Text bold> job-hunt</Text>, <Text dimColor>{` · ${activeCount} active`}</Text>],
     <Text dimColor>{dayOf(props.now)}</Text>,
   )
+}
+
+function welcomeOf(ui: ClientElements, width: number, isBusy: boolean, post: Post): RenderElement[] {
+  const { Button, Text } = ui
+  const noteOf = (text: string) => wrapOf(text, width - INDENT.length, 3).map(line => <Text dimColor>{`${INDENT}${line}`}</Text>)
+
+  return [
+    <Text bold>No resume.txt in this folder yet.</Text>,
+    <Text> </Text>,
+    <Button key="hunt:init" hotkey="i" plain dimColor={isBusy} onPress={() => post('init')}>set up this folder</Button>,
+    ...noteOf('Claude turns your resume (PDF, DOCX, Markdown or a LinkedIn export) into resume.txt'),
+    <Text> </Text>,
+    <Button key="hunt:demo" hotkey="d" plain onPress={() => post('anon')}>try the demo</Button>,
+    ...noteOf('made-up data, nothing is written; p switches back'),
+  ]
 }
 
 function sectionOf(ui: ClientElements, title: string, note: string): RenderElement[] {
